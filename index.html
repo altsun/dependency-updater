@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Dependency Updater</title>
+<meta name="description" content="Quét toàn bộ repo GitHub và mở PR nâng cấp thư viện — chạy hoàn toàn trong trình duyệt." />
+<link rel="stylesheet" href="css/style.css" />
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='14' font-size='14'>📦</text></svg>" />
+</head>
+<body>
+<header class="topbar">
+  <div class="brand"><span class="logo">📦</span> Dependency&nbsp;Updater</div>
+  <div class="topbar-right">
+    <span id="rate-limit" class="muted"></span>
+    <span id="who" class="who hidden"></span>
+    <button id="sign-out" class="btn ghost hidden">Đăng xuất</button>
+  </div>
+</header>
+
+<main>
+  <!-- Step 1 — credentials & options -->
+  <section class="card" id="step-auth">
+    <h2><span class="step">1</span> Kết nối GitHub</h2>
+    <p class="muted">
+      Trang này là static site, không có backend. Token của bạn chỉ nằm trong trình duyệt
+      (<code>localStorage</code>) và chỉ được gửi tới <code>api.github.com</code>.
+    </p>
+
+    <label for="token">Fine-grained personal access token</label>
+    <input id="token" type="password" spellcheck="false" autocomplete="off"
+           placeholder="github_pat_… hoặc ghp_…" />
+    <p class="hint">
+      Quyền cần thiết: <b>Contents: Read and write</b>, <b>Pull requests: Read and write</b>,
+      <b>Metadata: Read-only</b>.
+      <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">Tạo token →</a>
+    </p>
+
+    <div class="row">
+      <label class="field">
+        <span>Phạm vi repo</span>
+        <select id="affiliation">
+          <option value="owner">Repo tôi sở hữu</option>
+          <option value="owner,collaborator">Sở hữu + được mời cộng tác</option>
+          <option value="owner,collaborator,organization_member">Tất cả (kể cả organization)</option>
+        </select>
+      </label>
+      <label class="field">
+        <span>Chỉ một organization (tuỳ chọn)</span>
+        <input id="org" type="text" placeholder="ví dụ: my-company" spellcheck="false" />
+      </label>
+      <label class="field">
+        <span>Giới hạn số repo quét</span>
+        <input id="max-repos" type="number" min="1" max="500" value="50" />
+      </label>
+    </div>
+
+    <fieldset class="toggles">
+      <legend>Mức nâng cấp cho phép</legend>
+      <label><input type="checkbox" id="allow-patch" checked /> patch <span class="muted">1.2.3 → 1.2.9</span></label>
+      <label><input type="checkbox" id="allow-minor" checked /> minor <span class="muted">1.2.3 → 1.5.0</span></label>
+      <label><input type="checkbox" id="allow-major" /> major <span class="muted">1.2.3 → 2.0.0 (breaking)</span></label>
+    </fieldset>
+
+    <fieldset class="toggles">
+      <legend>Bỏ qua</legend>
+      <label><input type="checkbox" id="skip-forks" checked /> repo fork</label>
+      <label><input type="checkbox" id="skip-archived" checked /> repo đã archive</label>
+      <label><input type="checkbox" id="skip-private" /> repo private</label>
+    </fieldset>
+
+    <div class="actions">
+      <button id="scan" class="btn primary">Quét repo</button>
+      <button id="cancel" class="btn ghost hidden">Dừng</button>
+    </div>
+  </section>
+
+  <!-- Step 2 — progress -->
+  <section class="card hidden" id="step-progress">
+    <h2><span class="step">2</span> Đang quét</h2>
+    <div class="progress"><div id="progress-bar"></div></div>
+    <p id="progress-text" class="muted"></p>
+  </section>
+
+  <!-- Step 3 — results -->
+  <section class="card hidden" id="step-results">
+    <h2><span class="step">3</span> Kết quả</h2>
+    <div class="results-toolbar">
+      <span id="results-summary" class="muted"></span>
+      <span class="spacer"></span>
+      <button id="select-all" class="btn ghost small">Chọn tất cả</button>
+      <button id="select-none" class="btn ghost small">Bỏ chọn</button>
+      <button id="create-all" class="btn primary">Tạo PR cho mọi repo đã chọn</button>
+    </div>
+    <div id="results"></div>
+  </section>
+
+  <section class="card" id="log-card">
+    <h2>Nhật ký</h2>
+    <pre id="log" class="log"></pre>
+  </section>
+</main>
+
+<footer>
+  <span>Chạy 100% trong trình duyệt · không có server · không gửi token đi đâu khác.</span>
+</footer>
+
+<script type="module" src="js/app.js"></script>
+</body>
+</html>
