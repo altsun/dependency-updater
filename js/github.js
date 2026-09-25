@@ -90,11 +90,18 @@ export class GitHub {
     return data;
   }
 
+  /**
+   * The Contents API silently transcodes non-UTF-8 files (e.g. UTF-16) to
+   * UTF-8 in its JSON response, which masks the file's real on-disk encoding.
+   * We fetch the raw blob instead so we can detect and later preserve it.
+   */
   async getFile(owner, repo, path, ref) {
     const { data } = await this.request(
       `/repos/${owner}/${repo}/contents/${path.split('/').map(encodeURIComponent).join('/')}?ref=${encodeURIComponent(ref)}`
     );
-    return { content: decodeBase64(data.content), sha: data.sha };
+    const { data: blob } = await this.request(`/repos/${owner}/${repo}/git/blobs/${data.sha}`);
+    const { text, encoding } = decodeBytes(base64ToBytes(blob.content));
+    return { content: text, sha: data.sha, encoding };
   }
 
   async getRef(owner, repo, branch) {
@@ -112,12 +119,12 @@ export class GitHub {
     return data;
   }
 
-  async putFile(owner, repo, path, { content, message, branch, sha }) {
+  async putFile(owner, repo, path, { content, message, branch, sha, encoding = 'utf-8' }) {
     const { data } = await this.request(
       `/repos/${owner}/${repo}/contents/${path.split('/').map(encodeURIComponent).join('/')}`,
       {
         method: 'PUT',
-        body: JSON.stringify({ message, content: encodeBase64(content), branch, sha }),
+        body: JSON.stringify({ message, content: bytesToBase64(encodeBytes(content, encoding)), branch, sha }),
       }
     );
     return data;
@@ -132,17 +139,56 @@ export class GitHub {
   }
 }
 
-export function decodeBase64(b64) {
+export function base64ToBytes(b64) {
   const bin = atob((b64 || '').replace(/\s/g, ''));
-  const bytes = Uint8Array.from(bin, (c) => c.charCodeAt(0));
-  return new TextDecoder('utf-8').decode(bytes);
+  return Uint8Array.from(bin, (c) => c.charCodeAt(0));
 }
 
-export function encodeBase64(text) {
-  const bytes = new TextEncoder().encode(text);
+export function bytesToBase64(bytes) {
   let bin = '';
   for (let i = 0; i < bytes.length; i += 0x8000) {
     bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
   }
   return btoa(bin);
+}
+
+/** Detects BOM-marked encodings; anything else is assumed UTF-8. */
+function detectEncoding(bytes) {
+  if (bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf) return 'utf-8-bom';
+  if (bytes[0] === 0xff && bytes[1] === 0xfe) return 'utf-16le';
+  if (bytes[0] === 0xfe && bytes[1] === 0xff) return 'utf-16be';
+  return 'utf-8';
+}
+
+/** Decodes raw file bytes, reporting the detected encoding so it can be preserved on write. */
+export function decodeBytes(bytes) {
+  const encoding = detectEncoding(bytes);
+  const decoderName = encoding === 'utf-8-bom' ? 'utf-8' : encoding;
+  return { text: new TextDecoder(decoderName).decode(bytes), encoding };
+}
+
+/** Re-encodes text into the given encoding, mirroring what decodeBytes detected. */
+export function encodeBytes(text, encoding) {
+  if (encoding === 'utf-16le' || encoding === 'utf-16be') {
+    const bytes = new Uint8Array(2 + text.length * 2);
+    const le = encoding === 'utf-16le';
+    bytes[0] = le ? 0xff : 0xfe;
+    bytes[1] = le ? 0xfe : 0xff;
+    for (let i = 0; i < text.length; i++) {
+      const code = text.charCodeAt(i);
+      const lo = code & 0xff;
+      const hi = (code >> 8) & 0xff;
+      bytes[2 + i * 2] = le ? lo : hi;
+      bytes[2 + i * 2 + 1] = le ? hi : lo;
+    }
+    return bytes;
+  }
+  const utf8 = new TextEncoder().encode(text);
+  if (encoding === 'utf-8-bom') {
+    const bytes = new Uint8Array(3 + utf8.length);
+    bytes.set([0xef, 0xbb, 0xbf]);
+    bytes.set(utf8, 3);
+    return bytes;
+  }
+  return utf8;
 }

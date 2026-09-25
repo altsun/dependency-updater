@@ -41,6 +41,7 @@ export async function openUpdatePr(gh, repo, manifests, options = {}) {
       message,
       branch,
       sha: m.sha,
+      encoding: m.encoding,
     });
     sha = res.commit.sha;
   }

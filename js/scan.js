@@ -40,7 +40,7 @@ export async function scanRepo(gh, repo, options = {}) {
 
       if (!updates.length) return;
       updates.sort((a, b) => a.name.localeCompare(b.name));
-      result.manifests.push({ ...manifest, sha: file.sha, content: file.content, updates });
+      result.manifests.push({ ...manifest, sha: file.sha, content: file.content, encoding: file.encoding, updates });
       result.updateCount += updates.length;
     } catch (err) {
       result.error = err.message;
